@@ -119,3 +119,94 @@ def split_documents(docs):
 
 docs= DocumentConverter().json_to_langchainDocs("E:/OneDrive/Documents/GitHub/sourceGroundedAnswer/data/processed/all_documents.json")
 chunks= split_documents(docs)
+
+
+
+
+from typing import Callable, Dict, List
+
+RAW_DIR = Path(
+    "E:/OneDrive/Documents/GitHub/sourceGroundedAnswer/data/raw/"
+)
+
+PROCESSED_DIR = Path(
+    "E:/OneDrive/Documents/GitHub/sourceGroundedAnswer/data/chunks/"
+)
+PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+
+OUTPUT_FILE = PROCESSED_DIR / "all_chunks.json"
+
+class MetadataStage2:
+    """
+    Stage 2:
+    - Convert LangChain Documents into final chunk dictionaries
+    - Add chunk_id (outside metadata)
+    - Normalize metadata
+    - Save / load / preview chunks
+    """
+
+    # ---------- normalize ----------
+
+    def normalize(self, docs: List[Document]) -> List[Dict]:
+        chunks: List[Dict] = []
+
+        for idx, d in enumerate(docs):
+            source = d.metadata.get("source")
+            doc_name = Path(source).name if source else None
+
+            page = d.metadata.get("page", idx + 1)
+
+            chunk = {
+                "chunk_id": idx,
+                "chunk_text": d.page_content,
+                "metadata": {
+                    **d.metadata,
+                    "doc_name": doc_name,
+                    "page": page,
+                },
+            }
+
+            chunks.append(chunk)
+
+        return chunks
+
+    # ---------- save ----------
+
+    def save_all(self, chunks: List[Dict]) -> None:
+        with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+            json.dump(
+                chunks,
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
+
+    # ---------- load ----------
+
+    def load_all(self) -> List[Dict]:
+        with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    # ---------- preview ----------
+
+    def preview(self, chunks: List[Dict], chars: int = 200) -> None:
+        print(f"\nTotal chunks: {len(chunks)}\n")
+
+        for i, c in enumerate(chunks):
+            text = (c.get("chunk_text") or "")[:chars].replace("\n", " ")
+            print(f"[{i}] {text}...")
+            print(f"    chunk_id: {c.get('chunk_id')}")
+            print(f"    metadata: {c.get('metadata')}\n")
+
+
+# -------------------------------------------------------------------
+# Example usage (THIS is how you call it)
+# -------------------------------------------------------------------
+
+# docs = DocumentConverter().json_to_langchainDocs("path/to/all_documents.json")
+# chunks = split_documents(docs)
+
+stage2 = MetadataStage2()
+chunks = stage2.normalize(chunks)
+stage2.save_all(chunks)
+stage2.preview(chunks)
