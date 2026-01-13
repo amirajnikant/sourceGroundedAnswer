@@ -1,0 +1,90 @@
+rag_verification_system/
+│
+├── README.md
+│
+├── config/
+│   ├── rules.yaml                  # Step 0: system rules & axioms
+│   ├── retrieval.yaml              # BM25 / dense / hybrid configs
+│   ├── entailment.yaml             # thresholds, models, fail-closed flags
+│   └── policy.yaml                 # failure → action mapping
+│
+├── data/
+│   ├── raw/                         # original documents
+│   ├── processed/                  # cleaned text
+│   └── chunks/                     # chunked + ID-assigned data
+│
+├── ingestion/
+│   ├── loader.py                   # Step 2: document loading
+│   ├── parser.py                   # PDF / HTML parsing
+│   └── metadata.py                 # source, page, section handling
+│
+├── chunking/
+│   ├── splitter.py                 # Step 3: atomic chunking
+│   ├── chunk_id.py                 # stable chunk ID generation
+│   └── validators.py               # chunk sanity checks
+│
+├── indexing/
+│   ├── embeddings.py               # Step 4: embedding logic
+│   ├── vector_store.py             # Milvus / FAISS
+│   └── bm25_index.py               # sparse index
+│
+├── retrieval/
+│   ├── dense.py                    # dense retrieval
+│   ├── sparse.py                  # BM25 retrieval
+│   ├── hybrid.py                  # Step 5: union + dedup
+│   └── candidate_set.py            # candidate chunk locking
+│
+├── generation/
+│   ├── draft_answer.py             # Step 6: LLM draft (untrusted)
+│   └── prompts.py                  # controlled generation prompts
+│
+├── claims/
+│   ├── extractor.py                # Step 7: claim extraction
+│   ├── normalizer.py               # atomic + abstraction rules
+│   └── schema.py                   # claim data models
+│
+├── verification/
+│   ├── lexical_gate.py             # Step 8: lexical checks
+│   ├── scope_gate.py               # entity / modifier checks
+│   ├── similarity_gate.py          # semantic similarity
+│   ├── nli_gate.py                 # entailment model
+│   └── verifier.py                 # evidence-first verification
+│
+├── policy/
+│   ├── failure_classifier.py       # Step 9: failure typing
+│   ├── decision_engine.py          # refuse vs repair vs drop
+│   └── enums.py                    # failure/action enums
+│
+├── repair/
+│   ├── repair_prompt.py            # Step 10: constrained regeneration
+│   ├── repair_loop.py              # bounded retry logic
+│   └── guards.py                   # no-new-claims enforcement
+│
+├── output/
+│   ├── assembler.py                # Step 12: final answer assembly
+│   ├── citation_binder.py          # attach verified evidence
+│   └── formatter.py                # response formatting
+│
+├── api/
+│   ├── main.py                     # FastAPI entrypoint
+│   ├── routes.py                   # /ask endpoint
+│   └── schemas.py                  # request/response models
+│
+├── observability/
+│   ├── tracing.py                  # LangSmith / OTEL
+│   ├── logging.py                  # structured logs
+│   └── metrics.py                  # refusal rate, repair rate
+│
+├── tests/
+│   ├── test_claim_extraction.py
+│   ├── test_entailment.py
+│   ├── test_wrong_citation.py
+│   ├── test_overgeneralization.py
+│   └── test_repair_loop.py
+│
+├── utils/
+│   ├── text.py
+│   ├── hashing.py
+│   └── timeouts.py
+│
+└── requirements.txt

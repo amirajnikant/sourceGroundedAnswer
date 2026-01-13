@@ -1,0 +1,93 @@
+# -----------------------------
+# Core LangChain
+# -----------------------------
+langchain
+langchain-core
+langchain-community
+
+# -----------------------------
+# LLM Providers
+# -----------------------------
+langchain-google-genai
+openai
+
+# -----------------------------
+# Environment & Config
+# -----------------------------
+python-dotenv
+
+# -----------------------------
+# Embeddings & Tokenization
+# -----------------------------
+tiktoken
+sentence-transformers
+
+# -----------------------------
+# Vector Stores
+# -----------------------------
+pymilvus
+faiss-cpu
+
+# -----------------------------
+# Sparse & Hybrid Retrieval
+# -----------------------------
+rank-bm25
+elasticsearch
+
+# -----------------------------
+# Reranking (critical)
+# -----------------------------
+torch
+transformers
+sentencepiece
+
+# -----------------------------
+# Document Loading & Parsing
+# -----------------------------
+pypdf
+beautifulsoup4
+lxml
+unstructured
+markdown
+python-pptx
+python-docx
+
+# -----------------------------
+# Chunking & Text Processing
+# -----------------------------
+nltk
+spacy
+
+# -----------------------------
+# Evaluation & Hallucination Detection
+# -----------------------------
+ragas
+datasets
+evaluate
+
+# -----------------------------
+# Validation & Data Models
+# -----------------------------
+pydantic
+jsonschema
+
+# -----------------------------
+# API & Serving
+# -----------------------------
+fastapi
+uvicorn
+httpx
+
+# -----------------------------
+# Observability & Tracing
+# -----------------------------
+langsmith
+opentelemetry-api
+opentelemetry-sdk
+
+# -----------------------------
+# Utilities
+# -----------------------------
+requests
+tenacity
+tqdm

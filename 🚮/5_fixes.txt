@@ -1,0 +1,251 @@
+Good. Now we stop admiring the problem and **actually fix the system**.
+
+I’m going to be ruthless and concrete.
+For **each of the 5 items**, I’ll give you:
+
+* **What to change conceptually**
+* **What to add to the pipeline**
+* **What the new control flow looks like**
+* **Why this doesn’t break your core axiom (#5)**
+
+No abstractions. No vibes.
+
+---
+
+# FIXING THE 5 PROBLEMS — PRECISELY
+
+---
+
+## 1️⃣ Fix: “Any failure → refuse everything” is too rigid
+
+### What’s wrong
+
+You’re treating **all failures as fatal**. That’s logically pure, product-naïve.
+
+### Fix: **Failure-type classification + policy**
+
+After entailment, classify failures:
+
+```json
+failure_type ∈ {
+  UNSUPPORTED_FACT,
+  OVERGENERALIZATION,
+  MISSING_EVIDENCE,
+  CONTRADICTION,
+  CLAIM_MERGE_ERROR
+}
+```
+
+### Policy matrix (example)
+
+| Failure Type       | Action        |
+| ------------------ | ------------- |
+| UNSUPPORTED_FACT   | ❌ Refuse      |
+| CONTRADICTION      | ❌ Refuse      |
+| OVERGENERALIZATION | 🔧 Drop claim |
+| CLAIM_MERGE_ERROR  | 🔧 Re-split   |
+| MISSING_EVIDENCE   | 🔁 Re-ask     |
+
+### New control logic
+
+```python
+if fatal_failure:
+    refuse()
+elif fixable_failure:
+    repair()
+else:
+    answer()
+```
+
+**Key point:**
+You did **not** weaken correctness — you added **governance**.
+
+---
+
+## 2️⃣ Fix: Entailment models hallucinate confidence
+
+### What’s wrong
+
+You’re trusting a single NLI verdict.
+
+### Fix: **Fail-closed, multi-signal entailment**
+
+A claim passes only if **ALL gates pass**:
+
+1. Lexical overlap (hard gate)
+2. Scope match (no new entities / modifiers)
+3. Semantic similarity > threshold
+4. NLI == ENTAILMENT (high confidence)
+
+```python
+if (
+  lexical_ok
+  and scope_ok
+  and sim_score > τ
+  and nli == ENTAILMENT
+):
+    pass
+else:
+    fail
+```
+
+### Why this works
+
+* NLI no longer decides alone
+* Overconfidence is neutralized
+* False positives drop sharply
+
+This is **engineering discipline**, not ML magic.
+
+---
+
+## 3️⃣ Fix: Claim extraction is not perfect
+
+### What’s wrong
+
+You assume one sentence = one claim.
+
+That’s false.
+
+### Fix: **Claim normalization stage**
+
+Add a stage **before entailment**:
+
+```text
+LLM answer
+   ↓
+syntactic splitter
+   ↓
+atomic claim validator
+```
+
+Rules:
+
+* One verb per claim
+* No conjunctions (`and`, `or`, `which`)
+* No abstract predicates (“improves”, “enhances”)
+
+Example fix:
+
+> “Logs requests and improves security”
+
+→ rejected → regenerated as:
+
+> “Logs incoming API requests.”
+
+### You must be strict here
+
+False refusal > false acceptance.
+
+---
+
+## 4️⃣ Fix: No re-ask / repair loop
+
+### What’s wrong
+
+Failure ends the pipeline.
+
+### Fix: **Constrained regeneration loop**
+
+On fixable failures:
+
+```text
+FAILURE REASON → fed back to LLM
+```
+
+With **hard constraints**:
+
+* Cannot introduce new claims
+* Cannot change claim count
+* Must remove or restate failed claim
+
+Example prompt constraint:
+
+> “Rewrite the answer using ONLY the supported claims below. Do not add new information.”
+
+### Loop (bounded)
+
+```python
+for attempt in range(2):
+    regenerate()
+    revalidate()
+```
+
+Max 2 attempts.
+No infinite loops. No drift.
+
+---
+
+## 5️⃣ Fix: “Correct answer + wrong evidence = incorrect answer”
+
+### This is NOT a problem — do NOT “fix” it
+
+This is your **axiom**.
+
+What you *do* add is **evidence verification**:
+
+```python
+for claim in claims:
+    for cited_chunk in claim.citations:
+        verify_entailment(claim, cited_chunk)
+```
+
+If evidence doesn’t entail:
+
+* Claim fails
+* Repair or refusal triggers
+
+This preserves:
+
+> **Correctness = provability**
+
+Do not compromise here. Ever.
+
+---
+
+# FINAL PIPELINE (CORRECTED)
+
+```text
+Retrieve (hybrid)
+   ↓
+Draft answer (untrusted)
+   ↓
+Claim extraction + normalization
+   ↓
+Evidence locking
+   ↓
+Multi-signal entailment
+   ↓
+Failure classification
+   ↓
+[Refuse | Repair | Answer]
+```
+
+This is now:
+
+* Deterministic
+* Explainable
+* Repairable
+* Interview-proof
+
+---
+
+# Hard truth (read this)
+
+Most RAG systems stop at retrieval.
+Yours **goes beyond generation into verification and governance**.
+
+That’s why this project is strong — but only **if you implement these fixes**.
+
+---
+
+## Your next decision (important)
+
+Pick **one** to implement first:
+
+1. Failure taxonomy + policy table (highest leverage)
+2. Claim normalization logic
+3. Repair loop prompts + controls
+4. Entailment gate implementation details
+
+Choose deliberately.
