@@ -1,152 +1,131 @@
-# from chunking.splitter import DocumentConverter
-# from langchain_core.documents import Document
-# from langchain_ollama import OllamaEmbeddings
-# from langchain_community.vectorstores import FAISS
+import re
+import json
+from pathlib import Path
+from typing import List
+from langchain_core.documents import Document
+from sentence_transformers import CrossEncoder
+from langchain_ollama import OllamaEmbeddings
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
+from langchain_community.vectorstores import FAISS
+from core.converter import JsonLangChainDocumentMapper
+from langchain_community.retrievers import BM25Retriever
 
-# converter= DocumentConverter()
+CHUNKS_FILE = Path(
+    "E:/OneDrive/Documents/GitHub/sourceGroundedAnswer/data/chunks/all_chunks.json"
+)
+VECTORSTORE_DIR = Path(
+    "E:/OneDrive/Documents/GitHub/sourceGroundedAnswer/data/vectorstore/faiss"
+)
+VECTORSTORE_DIR.mkdir(parents=True, exist_ok=True)
 
-# docs= converter.json_to_langchainDocs("E:/OneDrive/Documents/GitHub/sourceGroundedAnswer/data/chunks/all_chunks.json")
+docs_for_embedding = json.loads(Path(CHUNKS_FILE).read_text(encoding="utf-8"))
+json_to_doc = JsonLangChainDocumentMapper()
+docs_for_embedding = json_to_doc.json_to_documents(docs_for_embedding)
 
-# docs_for_embedding = [
-#     Document(
-#         page_content=chunk["chunk_text"],   # ONLY text is embedded
-#         metadata={
-#             "chunk_id": chunk["chunk_id"],
-#             **chunk["metadata"],
-#         },
-#     )
-#     for chunk in docs
-# ]
 
-# embeddings = OllamaEmbeddings(
-#     model="nomic-embed-text"
-# ) 
+embeddings = OllamaEmbeddings(
+    model="nomic-embed-text"
+)
 
 # vectorstore = FAISS.from_documents(
 #     documents=docs_for_embedding,
 #     embedding=embeddings
 # )
 
-# results = vectorstore.similarity_search(
-#     "acute leukemia diagnosis",
-#     k=3
-# )
-
-# from pathlib import Path
-
-# VECTORSTORE_DIR = Path(
-#     "E:/OneDrive/Documents/GitHub/sourceGroundedAnswer/data/vectorstore"
-# )
-
-# VECTORSTORE_DIR.mkdir(parents=True, exist_ok=True)
-# print("before")
 # vectorstore.save_local(VECTORSTORE_DIR)
-# print("after")
 
-
-
-
-import json
-from pathlib import Path
-
-from langchain_core.documents import Document
-from langchain_ollama import OllamaEmbeddings
-from langchain_community.vectorstores import FAISS
-
-
-# --------------------------------------------------
-# Load chunks AS DICTS (correct)
-# --------------------------------------------------
-
-CHUNKS_FILE = Path(
-    "E:/OneDrive/Documents/GitHub/sourceGroundedAnswer/data/chunks/all_chunks.json"
+vectorstore = FAISS.load_local(
+    VECTORSTORE_DIR,
+    embeddings,
+    allow_dangerous_deserialization=True
 )
 
-with open(CHUNKS_FILE, "r", encoding="utf-8") as f:
-    chunks = json.load(f)   # <-- list of dicts
+bm25_retriever = BM25Retriever.from_documents(docs_for_embedding)
+
+def bm25_query_update(query: str) -> str:
+    tokens = re.findall(r"[a-zA-Z0-9\-]+", query.lower())
+    keywords = [
+        t for t in tokens
+        if t not in ENGLISH_STOP_WORDS and len(t) > 2
+    ]
+    return " ".join(keywords)
+
+query = "Explain the clinical management and diagnostic workflow for acute leukemia in adults"
+
+dense_query = query
+bm25_query = bm25_query_update(query)
+
+dense_results = vectorstore.similarity_search(
+    query=dense_query,
+    k=10
+)
+
+bm25_retriever.k = 10
+bm25_results = bm25_retriever.invoke(bm25_query)
+
+def merge_deduplicate(bm25_docs, dense_docs, max_candidates):
+    candidates = {}
+    i = 1
+    while i < len(bm25_docs) or i < len(dense_docs):
+        if i < len(bm25_docs):
+            doc = bm25_docs[i]
+            chunk_id = doc.metadata["chunk_id"]
+            if chunk_id not in candidates:
+                candidates[chunk_id] = doc
+            
+        if len(candidates) >= max_candidates:
+            break
+
+        if i < len(dense_docs):
+            doc = dense_docs[i]
+            chunk_id = doc.metadata["chunk_id"]
+            if chunk_id not in candidates: 
+                candidates[chunk_id] = doc
+
+        if len(candidates) >= max_candidates:
+            break
+
+        i+=1
 
 
-# --------------------------------------------------
-# Convert dict chunks -> Documents for embedding
-# --------------------------------------------------
+    return list(candidates.values())
 
-MAX_CHARS = 2000   # safe for nomic-embed-text
+candidate_chunks = merge_deduplicate(bm25_results, dense_results, 15)
 
-docs_for_embedding = []
+RERANKER = CrossEncoder(
+    "cross-encoder/ms-marco-MiniLM-L-6-v2",
+)
 
-for chunk in chunks:
-    text = chunk["chunk_text"]
+def rerank_candidate(query: str, docs: List[Document], top_n: int):
+    pairs = []
+    for doc in docs:
+        pairs.append((query,doc.page_content))
 
-    if not text:
-        continue
-
-    if len(text) > MAX_CHARS:
-        # split aggressively or truncate
-        text = text[:MAX_CHARS]
-
-    docs_for_embedding.append(
-        Document(
-            page_content=text,
-            metadata={
-                "chunk_id": chunk["chunk_id"],
-                **chunk["metadata"],
-            },
-        )
+    scores = RERANKER.predict(
+        pairs, 
+        batch_size=16,
+        show_progress_bar= False
     )
 
+    indices = list(range(len(scores)))
 
+    indices.sort(key=lambda i: scores[i], reverse=True)
 
-# --------------------------------------------------
-# Embeddings (Ollama)
-# --------------------------------------------------
+    reranked_docs = []
+    for i in indices[:top_n]:
+        reranked_docs.append(docs[i])
 
-embeddings = OllamaEmbeddings(
-    model="nomic-embed-text"
-)
+    return reranked_docs
 
+rerank_docs = rerank_candidate(query,candidate_chunks,10)
+print(rerank_docs)
 
-# --------------------------------------------------
-# Create FAISS vector store
-# --------------------------------------------------
-VECTORSTORE_DIR = Path(
-    "E:/OneDrive/Documents/GitHub/sourceGroundedAnswer/data/vectorstore/faiss"
-)
-
-VECTORSTORE_DIR.mkdir(parents=True, exist_ok=True)
-
-vectorstore = FAISS.from_documents(
-    documents=docs_for_embedding,
-    embedding=embeddings
-)
-
-# vectorstore = FAISS.load_local(
-#     VECTORSTORE_DIR,
-#     embeddings,
-#     allow_dangerous_deserialization=True
-# )
-
-
-
-# --------------------------------------------------
-# Test search
-# --------------------------------------------------
-
-results = vectorstore.similarity_search(
-    "acute leukemia diagnosis",
-    k=3
-)
-
-for r in results:
-    print(r.metadata["chunk_id"])
-    print(r.page_content[:200])
-    print()
-
-
-# --------------------------------------------------
-# Save FAISS index (EXPLICIT PATH)
-# --------------------------------------------------
-
-
-print("before save")
-vectorstore.save_local(VECTORSTORE_DIR)
-print("after save")
+converter = JsonLangChainDocumentMapper()
+RERANKED_PATH = Path("E:/OneDrive/Documents/GitHub/sourceGroundedAnswer/data/reranked_docs/reranked_docs.json")
+with open(RERANKED_PATH, "w", encoding="utf-8") as f:
+    json.dump(
+        converter.documents_to_json(rerank_docs),
+        f,
+        ensure_ascii=False,
+        indent=2
+    )

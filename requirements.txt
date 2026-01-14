@@ -28,10 +28,11 @@ sentence-transformers
 # -----------------------------
 pymilvus
 faiss-cpu
-
+bm-25
 # -----------------------------
 # Sparse & Hybrid Retrieval
 # -----------------------------
+scikit-learn
 rank-bm25
 elasticsearch
 
